@@ -1,120 +1,152 @@
-# Remote Workspace — V2.5 Universal macOS Distribution
+# Remote Workspace — V2.9
 
-This package is set up to produce a portable macOS release for both Apple Silicon and Intel Macs.
+Remote Workspace is a Python/PySide6 SSH and SFTP desktop client with a neon dark UI, saved connections, multi-tab SSH sessions, local/remote file browsing, recursive transfers, and secure credential storage through the operating system keyring.
 
-## Quick start
+## macOS build
 
-Double-click:
+The macOS build targets a Universal 2 app for both Apple Silicon and Intel Macs.
 
-`build_distribution.command`
+### Quick start
 
-That attempts a Universal 2 build, verifies the architectures in the app bundle, and creates:
+Use a python.org Universal 2 Python 3.13 installation, then create the build environment:
 
-`dist/Remote Workspace.app`
+```bash
+/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m venv .build-venv
+source .build-venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt pyinstaller
+```
 
-and:
+For the Universal 2 build, `cffi` and `cryptography` must also be Universal 2 binaries. The known-good setup used during development is:
 
-`dist/Remote-Workspace-2.5-Universal.dmg`
+```bash
+python -m pip uninstall -y cffi
+ARCHFLAGS="-arch arm64 -arch x86_64" \
+python -m pip install --no-binary=cffi cffi
 
-The receiving Mac does not need Python installed.
+python -m pip uninstall -y cryptography
+python -m pip install --only-binary=:all: "cryptography==44.0.1"
+```
 
-## Universal 2 requirement
+Generate the app icon if needed:
 
-PyInstaller can build `arm64`, `x86_64`, or `universal2` apps on macOS, but a Universal 2 build requires the Python runtime and native dependencies used during the build to contain both architectures.
+```bash
+iconutil -c icns assets/RemoteWorkspace.iconset -o assets/RemoteWorkspace.icns
+```
 
-For the simplest setup, use a Universal 2 Python installer from python.org on the build Mac.
+Build:
 
-The included build script scans Mach-O files inside the finished `.app` and fails if it finds components missing `arm64` or `x86_64`.
+```bash
+rm -rf build dist
+python -m PyInstaller RemoteWorkspace.spec --clean --noconfirm
+```
 
-## DMG
+Verify the bundle is Universal 2:
 
-`create_dmg.command` creates a compressed DMG with:
+```bash
+python packaging/check_universal.py "dist/Remote Workspace.app"
+```
 
-- `Remote Workspace.app`
-- an `Applications` shortcut
+Create the DMG:
 
-so the app can be installed by dragging it to Applications.
+```bash
+chmod +x create_dmg.command
+./create_dmg.command
+```
 
-## Signing and notarization
+For machines you control, the unsigned build can be used, although Gatekeeper may require right-click → Open on first launch. For clean distribution, use the included `sign_app.command` and `notarize_app.command` scripts with your own Apple Developer credentials.
 
-For machines you control, the unsigned build can be used, although Gatekeeper may require right-click → Open on first launch.
+## Windows AMD64 build
 
-For clean distribution to other users, use an Apple Developer Program account with a Developer ID Application certificate, then run:
+Windows builds should be produced on a Windows 10/11 x64 machine. PyInstaller does not cross-compile the Windows executable from macOS.
 
-`./sign_app.command`
+### Requirements
 
-Store notarization credentials in Keychain with Apple's `notarytool`, then run:
+Install **Python 3.13 64-bit** from python.org and make sure the Python launcher (`py`) is installed.
 
-`./notarize_app.command`
+### One-click build
 
-Finally recreate the DMG:
+From the repository root, run:
 
-`./create_dmg.command`
+```bat
+build_windows_amd64.bat
+```
 
-No Apple credentials are embedded in this project.
+The script:
 
-## Version
+1. verifies that Python 3.13 is 64-bit,
+2. creates a fresh `.build-venv`,
+3. installs the project requirements and PyInstaller,
+4. builds using `RemoteWorkspace-Windows.spec`, and
+5. verifies that the packaged executable exists.
 
-Remote Workspace 2.5  
+The finished portable application is created at:
+
+```text
+dist\Remote Workspace\Remote Workspace.exe
+```
+
+This is a PyInstaller **one-folder** build. Copy the entire:
+
+```text
+dist\Remote Workspace\
+```
+
+folder to another Windows AMD64 machine. Do not copy only `Remote Workspace.exe`, because the accompanying `_internal` directory contains the bundled Python runtime and dependencies.
+
+The destination machine does **not** need Python installed.
+
+### Manual Windows build
+
+If you prefer to build manually:
+
+```bat
+py -3.13 -m venv .build-venv
+call .build-venv\Scripts\activate.bat
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt pyinstaller
+python -m PyInstaller --clean --noconfirm RemoteWorkspace-Windows.spec
+```
+
+Saved credentials use Python `keyring`, which uses the Windows credential backend on Windows rather than macOS Keychain.
+
+## Current features
+
+- saved SSH destinations
+- password and private-key authentication
+- multi-tab SSH sessions
+- interactive PTY-backed shell
+- native macOS clipboard shortcuts
+- cursor-aware terminal redraw handling
+- shell command history with Up/Down
+- terminal Tab completion
+- SFTP local and remote browser
+- recursive folder upload/download
+- Finder/local drag-and-drop upload
+- remote rename, delete, and new-folder operations
+- transfer progress/history
+- remembered local/remote paths per connection
+- searchable connection sidebar
+- neon dark interface
+
+## Version history
+
+### V2.9
+
+Terminal Tab/Shift+Tab are intercepted before Qt focus traversal so shell/readline completion stays inside the terminal.
+
+### V2.8
+
+Introduced a cursor-aware VT-style renderer for common shell redraw behavior, fixed pasted trailing newlines auto-executing commands, history redraw, Backspace display, and SFTP path completion.
+
+### V2.7
+
+Corrected macOS Command/Control shortcut handling using Qt's platform-aware standard key matching.
+
+### V2.6
+
+Added terminal clipboard support and right-click Copy/Paste/Select All.
+
+## macOS bundle identity
+
 Bundle identifier: `net.alcyber.remoteworkspace`
-
-
-## V2.6 clipboard update
-
-The terminal now supports native macOS clipboard shortcuts:
-
-- Command-C copies selected terminal text
-- Command-V pastes clipboard text into the SSH session
-- Command-A selects all terminal text
-- Control-C copies when text is selected; otherwise it sends the SSH interrupt character
-- Control-Shift-C / Control-Shift-V provide terminal-style copy/paste
-- Right-click provides Copy, Paste, and Select All
-- Multi-line pasted text is normalized for terminal Enter handling
-
-
-## V2.7 macOS clipboard correction
-
-V2.6 incorrectly assumed that Qt's MetaModifier represented the macOS Command
-key. Qt intentionally swaps Command and Control on Apple platforms.
-
-V2.7 now uses Qt's platform-aware StandardKey matching:
-
-- Command-C: copy selected terminal text
-- Command-V: paste clipboard into SSH
-- Command-A: select all
-- Physical Control-C: send terminal interrupt (^C)
-- Control-Shift-C / Control-Shift-V: explicit terminal-style clipboard shortcuts
-- Right-click: Copy / Paste / Select All
-
-
-## V2.8 terminal/input fixes
-
-This release replaces the old "strip ANSI and append text" terminal renderer
-with a cursor-aware VT-style renderer for common interactive shell behavior.
-
-Fixes include:
-
-- pasted commands no longer execute merely because the clipboard had a trailing newline
-- carriage-return/redraw sequences no longer create repeated prompts
-- shell Up/Down history redraw works
-- terminal Tab completion redraw works
-- backspace no longer renders control-character squares
-- common cursor movement and erase sequences are interpreted instead of displayed
-- local SFTP path bar supports Tab completion
-- remote SFTP path bar supports Tab completion from the currently displayed directory
-
-The terminal is still intentionally lighter than a complete xterm emulator, but
-normal bash/zsh/readline interaction is now handled as a terminal screen rather
-than as an append-only text log.
-
-
-## V2.9 terminal Tab fix
-
-Qt normally consumes Tab/Shift+Tab for widget focus traversal before a
-QPlainTextEdit's keyPressEvent is called.
-
-The terminal now intercepts these keys in QWidget.event():
-
-- Tab is sent to the SSH PTY as `\t` for shell/readline completion
-- Shift+Tab sends the terminal back-tab sequence
-- focus stays in the terminal instead of jumping to the SFTP controls
