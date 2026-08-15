@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.build-venv/
+
+# PyInstaller / generated builds
+build/
+dist/
+*.dmg
+*.pkg
+
+# IDE
+.vscode/
+.idea/
+
+# Local/private data
+*.db
+*.sqlite
+*.sqlite3
+.env
